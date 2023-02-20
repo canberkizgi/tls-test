@@ -3,7 +3,6 @@ package com.cbi.tls;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
 import org.apache.http.impl.bootstrap.HttpServer;
@@ -18,27 +17,15 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import javax.net.ssl.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.URL;
 import java.net.UnknownHostException;
-import java.security.KeyManagementException;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.security.UnrecoverableKeyException;
+import java.security.*;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-
-import javax.net.ssl.KeyManager;
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLHandshakeException;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
@@ -72,6 +59,150 @@ public class TLSTest {
         httpclient = HttpClients.createDefault();
     }
 
+    @Test
+    public void execute_WithNoScheme_ThrowsClientProtocolExceptionInvalidHostname()
+            throws Exception {
+        final HttpServer server = createLocalTestServer(NO_SSL_CONTEXT, ONE_WAY_SSL);
+        server.start();
+
+        String baseUrl = getBaseUrl(server);
+
+        thrown.expect(IsInstanceOf.instanceOf(ClientProtocolException.class));
+        thrown.expectMessage("URI does not specify a valid host name");
+
+        httpclient.execute(new HttpGet(baseUrl + "/echo/this"));
+
+        server.stop();
+    }
+
+    @Test
+    public void httpRequest_Returns200OK() throws Exception {
+        final HttpServer server = createLocalTestServer(NO_SSL_CONTEXT, ONE_WAY_SSL);
+        server.start();
+
+        String baseUrl = getBaseUrl(server);
+
+        try {
+            HttpResponse httpResponse = httpclient.execute(
+                    new HttpGet("http://" + baseUrl + "/echo/this"));
+
+            assertThat(httpResponse.getStatusLine().getStatusCode(), equalTo(200));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    public void httpsRequest_WithNoSSLContext_ThrowsSSLExceptionPlaintextConnection() throws
+            Exception {
+        final HttpServer server = createLocalTestServer(NO_SSL_CONTEXT, ONE_WAY_SSL);
+        server.start();
+
+        String baseUrl = getBaseUrl(server);
+
+        try {
+            thrown.expect(IsInstanceOf.instanceOf(SSLException.class));
+            httpclient.execute(new HttpGet("https://" + baseUrl + "/echo/this"));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    public void httpsRequest_With1WaySSLAndValidatingCertsButNoClientTrustStore_ThrowsSSLException()
+            throws Exception {
+        SSLContext serverSSLContext = createServerSSLContext(SERVER_KEYSTORE,
+                NO_SERVER_TRUST_MANAGER, KEYPASS_AND_STOREPASS_VALUE);
+
+        final HttpServer server = createLocalTestServer(serverSSLContext, ONE_WAY_SSL);
+        server.start();
+
+        String baseUrl = getBaseUrl(server);
+
+        /*
+        The server's cert does not exist in the default trust store. When connecting to a server
+        that presents a certificate for validation during the SSL handshake, our client cannot
+        validate it and throws an SSLHandshakeException
+         */
+        try {
+            thrown.expect(IsInstanceOf.instanceOf(SSLHandshakeException.class));
+            thrown.expectMessage("unable to find valid certification path to requested target");
+
+            httpclient.execute(new HttpGet("https://" + baseUrl + "/echo/this"));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    public void httpsRequest_With1WaySSLAndTrustingAllCertsButNoClientTrustStore_Returns200OK()
+            throws Exception {
+        /*
+        This time, we tell the client to trust all certificates presented to it, so certificate
+         validation is bypassed and the request succeeds
+         */
+        SSLContext trustedSSLContext =
+                new SSLContextBuilder().loadTrustMaterial(
+                                NO_CLIENT_KEYSTORE,
+                                (X509Certificate[] arg0, String arg1) -> {
+                                    return true;
+                                }) // trust all
+                        .build();
+
+        httpclient = HttpClients.custom().setSSLContext(trustedSSLContext).build();
+
+        SSLContext serverSSLContext = createServerSSLContext(SERVER_KEYSTORE,
+                NO_SERVER_TRUST_MANAGER, KEYPASS_AND_STOREPASS_VALUE);
+
+        final HttpServer server = createLocalTestServer(serverSSLContext, ONE_WAY_SSL);
+        server.start();
+
+        String baseUrl = getBaseUrl(server);
+
+        try {
+            HttpResponse httpResponse = httpclient.execute(
+                    new HttpGet("https://" + baseUrl + "/echo/this"));
+
+            assertThat(httpResponse.getStatusLine().getStatusCode(), equalTo(200));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    public void httpsRequest_With1WaySSLAndValidatingCertsAndClientTrustStore_Returns200OK()
+            throws Exception {
+        SSLContext serverSSLContext = createServerSSLContext(SERVER_KEYSTORE,
+                NO_SERVER_TRUST_MANAGER, KEYPASS_AND_STOREPASS_VALUE);
+
+        final HttpServer server = createLocalTestServer(serverSSLContext, ONE_WAY_SSL);
+        server.start();
+
+        String baseUrl = getBaseUrl(server);
+
+        // The server certificate was imported into the client's TrustStore (using keytool -import)
+        KeyStore clientTrustStore = getStore(CLIENT_TRUSTSTORE, KEYPASS_AND_STOREPASS_VALUE);
+
+        SSLContext sslContext =
+                new SSLContextBuilder().loadTrustMaterial(
+                        clientTrustStore, new TrustSelfSignedStrategy()).build();
+
+        httpclient = HttpClients.custom().setSSLContext(sslContext).build();
+
+        /*
+        The HTTP client will now validate the server's presented certificate using its TrustStore.
+         Since the cert was imported to the client's TrustStore explicitly (see above), the
+         certificate will validate and the request will succeed
+         */
+        try {
+            HttpResponse httpResponse = httpclient.execute(
+                    new HttpGet("https://" + baseUrl + "/echo/this"));
+
+            assertThat(httpResponse.getStatusLine().getStatusCode(), equalTo(200));
+        } finally {
+            server.stop();
+        }
+    }
 
 
     protected HttpServer createLocalTestServer(SSLContext sslContext, boolean forceSSLAuth)
