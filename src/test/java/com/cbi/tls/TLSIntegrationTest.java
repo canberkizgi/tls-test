@@ -62,10 +62,12 @@ public class TLSIntegrationTest {
 
     @Test
     public void rest_WithUntrustedServerCert_ThrowsSSLHandshakeException() throws Exception {
-        SSLContext sslContext = SSLContexts.custom().loadKeyMaterial(
-                getStore(CLIENT_KEYSTORE, storePassword.toCharArray()),
-                storePassword.toCharArray()
-        ).useProtocol("TLS").build();
+        SSLContext sslContext = SSLContexts.custom()
+                .loadKeyMaterial(
+                        getStore(CLIENT_KEYSTORE, storePassword.toCharArray()),
+                        storePassword.toCharArray())
+                // no trust store
+                .useProtocol("TLS").build();
         fail();
     }
     /**

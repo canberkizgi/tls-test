@@ -101,6 +101,7 @@ public class TLSTest {
             return true;
         }).build();
         httpclient = HttpClients.custom().setSSLContext(trustedSSLContext).build();
+        SSLContext serverSSLContext = createServerSSLContext(SERVER_KEYSTORE, NO_SERVER_TRUST_MANAGER, KEYPASS_AND_STOREPASS_VALUE);
         fail();
     }
 
