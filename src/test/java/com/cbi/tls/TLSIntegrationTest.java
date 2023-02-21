@@ -33,6 +33,7 @@ import javax.net.ssl.SSLHandshakeException;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @SpringBootTest(classes = TLSIntegrationTest.class, properties = "server.port=8081")
@@ -54,6 +55,19 @@ public class TLSIntegrationTest {
     @Value("${ssl.store-password}")
     private String storePassword;
 
+    @Test
+    public void rest_OverPlainHttp_GetsExpectedResponse() throws Exception {
+        fail();
+    }
+
+    @Test
+    public void rest_WithUntrustedServerCert_ThrowsSSLHandshakeException() throws Exception {
+        SSLContext sslContext = SSLContexts.custom().loadKeyMaterial(
+                getStore(CLIENT_KEYSTORE, storePassword.toCharArray()),
+                storePassword.toCharArray()
+        ).useProtocol("TLS").build();
+        fail();
+    }
     /**
      * KeyStores provide credentials, TrustStores verify credentials.
      *

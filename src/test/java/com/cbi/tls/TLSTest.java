@@ -42,6 +42,7 @@ import javax.net.ssl.TrustManagerFactory;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
 
 public class TLSTest {
 
@@ -72,7 +73,36 @@ public class TLSTest {
         httpclient = HttpClients.createDefault();
     }
 
+    @Test
+    public void execute_withNoSchema_ThrowsClientProtocolException() throws Exception {
+        fail();
+    }
 
+    @Test
+    public void httpRequest_Returns200OK() throws Exception {
+        fail();
+    }
+
+    @Test
+    public void httpRequest_WithNoSSLContext_ThrowsSSLException() {
+        fail();
+    }
+
+    @Test
+    public void httpsRequest_WithSSLAndValidatingCertsButNoClientTrustSture_ThrowsSSLException() throws Exception {
+        SSLContext serverSSLContext = createServerSSLContext(SERVER_KEYSTORE, NO_SERVER_TRUST_MANAGER, KEYPASS_AND_STOREPASS_VALUE);
+        fail();
+    }
+
+    @Test
+    public void httpsRequest_WithSSLAndTrustingAllCertsButNoClientTrustSture_Returns200OK() throws Exception {
+        SSLContext trustedSSLContext = new SSLContextBuilder()
+                .loadTrustMaterial(NO_CLIENT_KEYSTORE, (X509Certificate[] arg0, String arg1) -> {
+            return true;
+        }).build();
+        httpclient = HttpClients.custom().setSSLContext(trustedSSLContext).build();
+        fail();
+    }
 
     protected HttpServer createLocalTestServer(SSLContext sslContext, boolean forceSSLAuth)
             throws UnknownHostException {
