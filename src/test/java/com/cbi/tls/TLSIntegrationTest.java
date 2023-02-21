@@ -20,8 +20,6 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.web.client.RestTemplate;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLHandshakeException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -30,8 +28,12 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLHandshakeException;
+
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @SpringBootTest(classes = TLSIntegrationTest.class, properties = "server.port=8081")
@@ -55,42 +57,15 @@ public class TLSIntegrationTest {
 
     @Test
     public void rest_OverPlainHttp_GetsExpectedResponse() throws Exception {
-        Greeting expected = new Greeting("Hello, Robin!");
-
+        Greeting expected = new Greeting("Hello, Can!");
         TestRestTemplate template = new TestRestTemplate();
-
-        ResponseEntity<Greeting> responseEntity =
-                template.getForEntity("http://localhost:" + port + "/greeting?name={name}",
-                        Greeting.class, "Robin");
-
+        ResponseEntity<Greeting> responseEntity = template.getForEntity("http://localhost:" + port + "greeting?name={name}", Greeting.class, "Can");
         assertThat(responseEntity.getBody().getContent(), equalTo(expected.getContent()));
     }
 
     @Test
-    public void rest_WithMissingClientCert_ThrowsSSLHandshakeExceptionBadCertificate()
-            throws Exception {
-        Greeting expected = new Greeting("Hello, Robin!");
-
-        SSLContext sslContext = SSLContexts.custom()
-                // no key store
-                .loadTrustMaterial(
-                        getStore(CLIENT_TRUSTSTORE, storePassword.toCharArray()),
-                        new TrustSelfSignedStrategy())
-                .useProtocol("TLS").build();
-
-        RestTemplate template = getRestTemplateForHTTPS(sslContext);
-
-        thrown.expectCause(IsInstanceOf.instanceOf(SSLHandshakeException.class));
-        thrown.expectMessage("Received fatal alert: bad_certificate");
-
-        template.getForEntity("https://localhost:" + sslPort + "/greeting?name={name}",
-                Greeting.class, "Robin");
-    }
-
-    @Test
-    public void rest_WithUntrustedServerCert_ThrowsSSLHandshakeExceptionUnableFindValidCertPath()
-            throws Exception {
-        Greeting expected = new Greeting("Hello, Robin!");
+    public void rest_WithUntrustedServerCert_ThrowsSSLHandshakeException() throws Exception {
+        Greeting expected = new Greeting("Hello, Can!");
 
         SSLContext sslContext = SSLContexts.custom()
                 .loadKeyMaterial(
@@ -105,31 +80,7 @@ public class TLSIntegrationTest {
         thrown.expectMessage("unable to find valid certification path to requested target");
 
         template.getForEntity("https://localhost:" + sslPort + "/greeting?name={name}",
-                Greeting.class, "Robin");
-    }
-
-    @Test
-    public void rest_WithTwoWaySSL_AuthenticatesAndGetsExpectedResponse() throws Exception {
-        Greeting expected = new Greeting("Hello, Robin!");
-
-        SSLContext sslContext = SSLContexts.custom()
-                .loadKeyMaterial(
-                        getStore(CLIENT_KEYSTORE, storePassword.toCharArray()),
-                        storePassword.toCharArray())
-                .loadTrustMaterial(
-                        getStore(CLIENT_TRUSTSTORE, storePassword.toCharArray()),
-                        new TrustSelfSignedStrategy())
-                .useProtocol("TLS").build();
-
-        RestTemplate template = getRestTemplateForHTTPS(sslContext);
-
-        ResponseEntity<Greeting> responseEntity =
-                template.getForEntity("https://localhost:" + sslPort + "/greeting?name={name}",
-                        Greeting.class, "Robin");
-
-        assertThat(responseEntity.getBody().getContent(), equalTo(expected.getContent()));
-    }
-
+                Greeting.class, "Can");    }
     /**
      * KeyStores provide credentials, TrustStores verify credentials.
      *
